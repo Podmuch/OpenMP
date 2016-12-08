@@ -1,0 +1,10 @@
+﻿  PerlinNoise.cpp
+PerlinNoise.cpp(168): warning C4244: '=': conversion from 'double' to 'unsigned char', possible loss of data
+PerlinNoise.cpp(231): warning C4244: '=': conversion from 'double' to 'unsigned char', possible loss of data
+  Generating code
+  4 of 19 functions (21.1%) were compiled, the rest were copied from previous compilation.
+    1 functions were new in current compilation
+    1 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  PerlinNoise.vcxproj -> C:\Users\domin\Desktop\Informatyka Semestr IX\Architektury Wielordzeniowe\OpenMP\x64\Release\PerlinNoise.exe
+  PerlinNoise.vcxproj -> C:\Users\domin\Desktop\Informatyka Semestr IX\Architektury Wielordzeniowe\OpenMP\x64\Release\PerlinNoise.pdb (Full PDB)
