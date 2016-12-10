@@ -170,44 +170,50 @@ void ParallelPerlin(const char *fileName, unsigned int imageSize)
 	unsigned int shorterLoop;
 	unsigned int modulo;
 	unsigned int bytesToWrite;
+	unsigned int pixelsBeforeSync = 10000;
 
 	#pragma omp parallel
 	{
+		double n, x, y, width, height, biWidthD = BMIH.biWidth, biHeightD = BMIH.biHeight;
+		unsigned int nestedLoopEnd;
+		unsigned int tripleBiWidth = BMIH.biWidth * 3, triplePixelsBeforeSync = 3 * pixelsBeforeSync;
 		unsigned int numberOfThreads = omp_get_num_threads();
 		unsigned int threadIndex = omp_get_thread_num();
-		unsigned int startIndex = threadIndex * 3;
-		unsigned int loopStep = 3 * numberOfThreads;
-		double n, x, y, width, height, biWidthD = BMIH.biWidth, biHeightD = BMIH.biHeight;
-		unsigned int tripleBiWidth = BMIH.biWidth * 3;
+		unsigned int startIndex = threadIndex * triplePixelsBeforeSync;
+		unsigned int loopStep = triplePixelsBeforeSync * numberOfThreads;
 		#pragma omp master
 		{
-			bitmapData = (unsigned char*)malloc(sizeof(unsigned char) * 3 * numberOfThreads);
+			bitmapData = (unsigned char*)malloc(sizeof(unsigned char) * loopStep);
 			adjustedBitmapSize = BMIH.biSizeImage / 3;
-			modulo = adjustedBitmapSize % numberOfThreads;
+			modulo = adjustedBitmapSize % (pixelsBeforeSync * numberOfThreads);
 			if (modulo != 0)
 			{
-				adjustedBitmapSize += numberOfThreads - modulo;
+				adjustedBitmapSize += (pixelsBeforeSync * numberOfThreads) - modulo;
 			}
 			adjustedBitmapSize *= 3;
 			shorterLoop = loopStep - (adjustedBitmapSize - BMIH.biSizeImage);
 		}
 		#pragma omp barrier
-		// Visit every pixel of the image and assign a color generated with Perlin noise
-		for (unsigned int i = startIndex; i < adjustedBitmapSize; i += loopStep)
+		for (int i = startIndex; i < adjustedBitmapSize; i += loopStep)
 		{
-			width = (i / 3) % BMIH.biWidth;
-			height = i / tripleBiWidth;
-			x = width / biWidthD;
-			y = height / biHeightD;
+			nestedLoopEnd = i + triplePixelsBeforeSync;
+			// Visit every pixel of the image and assign a color generated with Perlin noise
+			for (unsigned int j = i, k = startIndex; j < nestedLoopEnd; j += 3, k+=3)
+			{
+				width = (j / 3) % BMIH.biWidth;
+				height = j / tripleBiWidth;
+				x = width / biWidthD;
+				y = height / biHeightD;
 
-			// Wood like structure
-			n = 20 * noise(x, y, 0.8);
-			n = n - floor(n);
+				// Wood like structure
+				n = 20 * noise(x, y, 0.8);
+				n = n - floor(n);
 
-			// Map the values to the [0, 255] interval, for simplicity we use tones of grey
-			bitmapData[startIndex] = floor(255 * n);
-			bitmapData[startIndex + 1] = bitmapData[startIndex];
-			bitmapData[startIndex + 2] = bitmapData[startIndex];
+				// Map the values to the [0, 255] interval, for simplicity we use tones of grey
+				bitmapData[k] = floor(255 * n);
+				bitmapData[k + 1] = bitmapData[k];
+				bitmapData[k + 2] = bitmapData[k];
+			}
 			#pragma omp barrier
 			#pragma omp master
 			{
