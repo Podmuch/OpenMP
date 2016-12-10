@@ -43,52 +43,6 @@ typedef struct tagBITMAPINFOHEADER
 
 #pragma pack(pop)
 
-bool SaveImage(char* szPathName, void* lpBits, int w, int h) 
-{
-	// Create a new file for writing
-	FILE* pFile = fopen(szPathName, "wb"); // wb -> w: writable b: binary, open as writable and binary
-	if (pFile == NULL) 
-	{
-		return false;
-	}
-
-	BITMAPINFOHEADER BMIH;                         // BMP header
-	BMIH.biSize = sizeof(BITMAPINFOHEADER);
-	BMIH.biSizeImage = w * h * 3;
-	// Create the bitmap for this OpenGL context
-	BMIH.biSize = sizeof(BITMAPINFOHEADER);
-	BMIH.biWidth = w;
-	BMIH.biHeight = h;
-	BMIH.biPlanes = 1;
-	BMIH.biBitCount = 24;
-	BMIH.biCompression = BI_RGB;
-	BMIH.biSizeImage = w * h * 3;
-
-	BITMAPFILEHEADER bmfh;                         // Other BMP header
-	int nBitsOffset = sizeof(BITMAPFILEHEADER) + BMIH.biSize;
-	LONG lImageSize = BMIH.biSizeImage;
-	LONG lFileSize = nBitsOffset + lImageSize;
-	bmfh.bfType = 'B' + ('M' << 8);
-	bmfh.bOffBits = nBitsOffset;
-	bmfh.bfSize = lFileSize;
-	bmfh.bfReserved1 = bmfh.bfReserved2 = 0;
-
-	// Write the bitmap file header               // Saving the first header to file
-	DWORD nWrittenFileHeaderSize = fwrite(&bmfh, 1, sizeof(BITMAPFILEHEADER), pFile);
-
-	// And then the bitmap info header            // Saving the second header to file
-	DWORD nWrittenInfoHeaderSize = fwrite(&BMIH, 1, sizeof(BITMAPINFOHEADER), pFile);
-
-	// Finally, write the image data itself
-	//-- the data represents our drawing          // Saving the file content in lpBits to file
-	DWORD nWrittenDIBDataSize = fwrite(lpBits, 1, lImageSize, pFile);
-	fclose(pFile); // closing the file.
-
-	return true;
-}
-
-#pragma region PERLIN NOISE
-
 unsigned char permutation[] = { 151, 160, 137, 91, 90, 15,
 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69, 142, 8, 99, 37, 240, 21, 10, 23,
 190, 6, 148, 247, 120, 234, 75, 0, 26, 197, 62, 94, 252, 219, 203, 117, 35, 11, 32, 57, 177, 33,
@@ -180,96 +134,74 @@ double noise(double x, double y, double z) {
 				grad(p[BB + 1], x - 1, y - 1, z - 1))));
 }
 
-#pragma endregion
-
-#pragma region PERLIN CALLS
-
-void SequentialPerlin(const char *fileName, BITMAPFILEHEADER &bitmapFileHeader, BITMAPINFOHEADER &bitmapInfoHeader)
+void ParallelPerlin(const char *fileName, unsigned int imageSize)
 {
-	clock_t start = clock();
-	unsigned int width, height;
-	unsigned char bitmapData[3];
+	double start = omp_get_wtime();
 	FILE *filePtr; //our file pointer
 				   //open filename in write binary mode
 	filePtr = fopen(fileName, "wb");
 	if (filePtr == NULL)
 		return;
-	fwrite(&bitmapFileHeader, 1, sizeof(BITMAPFILEHEADER), filePtr);
-	fwrite(&bitmapInfoHeader, 1, sizeof(BITMAPINFOHEADER), filePtr);
-	fseek(filePtr, bitmapFileHeader.bOffBits, SEEK_SET);
-	// Visit every pixel of the image and assign a color generated with Perlin noise
-	for (unsigned int i = 0; i < bitmapInfoHeader.biSizeImage; i += 3)
-	{
-		width = (i / 3) % bitmapInfoHeader.biWidth;
-		height = i / (bitmapInfoHeader.biWidth * 3);
-		double x = (double)width / ((double)bitmapInfoHeader.biWidth);
-		double y = (double)height / ((double)bitmapInfoHeader.biHeight);
 
-		// Wood like structure
-		double n = 20 * noise(x, y, 0.8);
-		n = n - floor(n);
+	BITMAPINFOHEADER BMIH;                         // BMP header
+	BMIH.biSize = sizeof(BITMAPINFOHEADER);
+	BMIH.biSizeImage = imageSize * imageSize * 3;
+	// Create the bitmap for this OpenGL context
+	BMIH.biWidth = imageSize;
+	BMIH.biHeight = imageSize;
+	BMIH.biPlanes = 1;
+	BMIH.biBitCount = 24;
+	BMIH.biCompression = BI_RGB;
 
-		// Map the values to the [0, 255] interval, for simplicity we use tones of grey
-		bitmapData[0] = floor(255 * n);
-		bitmapData[1] = bitmapData[0];
-		bitmapData[2] = bitmapData[0];
-		fwrite(bitmapData, 1, 3, filePtr);
-	}
-	fclose(filePtr);
-	clock_t end = clock();
-	printf("czas obliczen = %f s\n", (float)(end - start) / CLOCKS_PER_SEC);
-}
+	BITMAPFILEHEADER bmfh;                         // Other BMP header
+	int nBitsOffset = sizeof(BITMAPFILEHEADER) + BMIH.biSize;
+	LONG lImageSize = BMIH.biSizeImage;
+	LONG lFileSize = nBitsOffset + lImageSize;
+	bmfh.bfType = 'B' + ('M' << 8);
+	bmfh.bOffBits = nBitsOffset;
+	bmfh.bfSize = lFileSize;
+	bmfh.bfReserved1 = bmfh.bfReserved2 = 0;
 
-void ParallelPerlin(const char *fileName, BITMAPFILEHEADER &bitmapFileHeader, BITMAPINFOHEADER &bitmapInfoHeader)
-{
-	clock_t start = clock();
-	unsigned int width, height;
-	FILE *filePtr; //our file pointer
-				   //open filename in write binary mode
-	filePtr = fopen(fileName, "wb");
-	if (filePtr == NULL)
-		return;
-	fwrite(&bitmapFileHeader, 1, sizeof(BITMAPFILEHEADER), filePtr);
-	fwrite(&bitmapInfoHeader, 1, sizeof(BITMAPINFOHEADER), filePtr);
-	fseek(filePtr, bitmapFileHeader.bOffBits, SEEK_SET);
-
+	fwrite(&bmfh, 1, sizeof(BITMAPFILEHEADER), filePtr);
+	fwrite(&BMIH, 1, sizeof(BITMAPINFOHEADER), filePtr);
 
 	unsigned char* bitmapData;
 	unsigned int adjustedBitmapSize;
 	unsigned int shorterLoop;
 	unsigned int modulo;
 	unsigned int bytesToWrite;
-	// (u¿ywaj¹c bariery, uwa¿aæ na ostatni¹ liniê, gdzie nie ka¿dy w¹tek mo¿e coœ obliczaæ)
-	// wpisaæ masterem obliczon¹ porcjê danych do pliku (je¿eli danych bêdzie wiêcej, to master powinien uci¹æ ich czêœæ)
+
 	#pragma omp parallel
 	{
 		unsigned int numberOfThreads = omp_get_num_threads();
 		unsigned int threadIndex = omp_get_thread_num();
 		unsigned int startIndex = threadIndex * 3;
 		unsigned int loopStep = 3 * numberOfThreads;
+		double n, x, y, width, height, biWidthD = BMIH.biWidth, biHeightD = BMIH.biHeight;
+		unsigned int tripleBiWidth = BMIH.biWidth * 3;
 		#pragma omp master
 		{
 			bitmapData = (unsigned char*)malloc(sizeof(unsigned char) * 3 * numberOfThreads);
-			adjustedBitmapSize = bitmapInfoHeader.biSizeImage / 3;
+			adjustedBitmapSize = BMIH.biSizeImage / 3;
 			modulo = adjustedBitmapSize % numberOfThreads;
 			if (modulo != 0)
 			{
 				adjustedBitmapSize += numberOfThreads - modulo;
 			}
 			adjustedBitmapSize *= 3;
-			shorterLoop = loopStep - (adjustedBitmapSize - bitmapInfoHeader.biSizeImage);
+			shorterLoop = loopStep - (adjustedBitmapSize - BMIH.biSizeImage);
 		}
 		#pragma omp barrier
 		// Visit every pixel of the image and assign a color generated with Perlin noise
 		for (unsigned int i = startIndex; i < adjustedBitmapSize; i += loopStep)
 		{
-			width = (i / 3) % bitmapInfoHeader.biWidth;
-			height = i / (bitmapInfoHeader.biWidth * 3);
-			double x = (double)width / ((double)bitmapInfoHeader.biWidth);
-			double y = (double)height / ((double)bitmapInfoHeader.biHeight);
+			width = (i / 3) % BMIH.biWidth;
+			height = i / tripleBiWidth;
+			x = width / biWidthD;
+			y = height / biHeightD;
 
 			// Wood like structure
-			double n = 20 * noise(x, y, 0.8);
+			n = 20 * noise(x, y, 0.8);
 			n = n - floor(n);
 
 			// Map the values to the [0, 255] interval, for simplicity we use tones of grey
@@ -279,8 +211,7 @@ void ParallelPerlin(const char *fileName, BITMAPFILEHEADER &bitmapFileHeader, BI
 			#pragma omp barrier
 			#pragma omp master
 			{
-				bytesToWrite = (i + loopStep) <= bitmapInfoHeader.biSizeImage ? loopStep : shorterLoop;
-				printf("bytesToWrite=%d\n", bytesToWrite);
+				bytesToWrite = (i + loopStep) <= BMIH.biSizeImage ? loopStep : shorterLoop;
 				fwrite(bitmapData, 1, bytesToWrite, filePtr);
 			}
 			#pragma omp barrier
@@ -288,67 +219,20 @@ void ParallelPerlin(const char *fileName, BITMAPFILEHEADER &bitmapFileHeader, BI
 	}
 	free(bitmapData);
 	fclose(filePtr);
-	clock_t end = clock();
-	printf("czas obliczen = %f s\n", (float)(end - start) / CLOCKS_PER_SEC);
+	double end = omp_get_wtime();
+	printf("czas obliczen = %.16g s\n", end - start);
 }
-
-#pragma endregion
-
-#pragma region INITIALIZATION
-
-void InitFileHeader(BITMAPFILEHEADER& bitmapFileHeader, unsigned int imageSize)
-{
-	bitmapFileHeader.bfType = 19778;
-	bitmapFileHeader.bfSize = imageSize*imageSize * 3 + 122;
-	bitmapFileHeader.bfReserved1 = 0;
-	bitmapFileHeader.bfReserved2 = 0;
-	bitmapFileHeader.bOffBits = 122;
-}
-
-void InitInfoHeader(BITMAPINFOHEADER& bitmapInfoHeader, unsigned int imageSize)
-{
-	bitmapInfoHeader.biSize = 108;
-	bitmapInfoHeader.biWidth = imageSize;
-	bitmapInfoHeader.biHeight = imageSize;
-	bitmapInfoHeader.biPlanes = 1;
-	bitmapInfoHeader.biBitCount = 24;
-	bitmapInfoHeader.biCompression = 0;
-	bitmapInfoHeader.biSizeImage = imageSize*imageSize * 3;
-	bitmapInfoHeader.biXPelsPerMeter = 2835;
-	bitmapInfoHeader.biYPelsPerMeter = 2835;
-	bitmapInfoHeader.biClrUsed = 0;
-	bitmapInfoHeader.biClrImportant = 0;
-}
-
-#pragma endregion
 
 int main()
 {
-	BITMAPFILEHEADER bitmapFileHeader;
-	BITMAPINFOHEADER bitmapInfoHeader;
-	unsigned int seed, imageSize;
+	unsigned int seed = 50, imageSize = 10000;
 	unsigned char generationType;
-	printf("Podaj ziarno do generacji wektora permutacji:\n");
+	/*printf("Podaj ziarno do generacji wektora permutacji:\n");
 	scanf("%d", &seed);
 	printf("Podaj rozmiar wynikowego obrazka:\n");
-	scanf("%d", &imageSize);
+	scanf("%d", &imageSize);*/
 	init_p(seed);
-	InitFileHeader(bitmapFileHeader, imageSize);
-	InitInfoHeader(bitmapInfoHeader, imageSize);
-	printf("Wybierz sposob obliczen: 's' - sekwencyjne, 'p' - rownolegle (OpenMP):\n");
-	do
-	{
-		scanf("%c", &generationType);
-		switch (generationType)
-		{
-		case 's':
-			SequentialPerlin("testbitmap.bmp", bitmapFileHeader, bitmapInfoHeader);
-			break;
-		case 'p':
-			ParallelPerlin("testbitmap.bmp", bitmapFileHeader, bitmapInfoHeader);
-			break;
-		}
-	} while (generationType == '\n');
+	ParallelPerlin("testbitmap.bmp", imageSize);
 	system("pause");
 	return 0;
 }
